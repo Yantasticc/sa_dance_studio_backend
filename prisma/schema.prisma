@@ -1,0 +1,249 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+
+
+enum CourseStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum BatchStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum StudentStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum EnquiryStatus {
+  NEW
+  CONTACTED
+  CONVERTED
+  CLOSED
+}
+
+enum EventStatus {
+  UPCOMING
+  COMPLETED
+  CANCELLED
+}
+
+enum CampaignStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+model Admin {
+  id             String    @id @default(uuid())
+  name           String
+  email          String    @unique
+  passwordHash   String
+  role           String    @default("ADMIN")
+  isActive       Boolean   @default(true)
+  resetOtp       String?
+  resetOtpExpiry DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+model Course {
+  id             String          @id @default(uuid())
+  name           String
+  description    String
+  image          String
+  status         CourseStatus    @default(ACTIVE)
+  batches        Batch[]
+  students       Student[]
+  enquiries      Enquiry[]
+  emailCampaigns EmailCampaign[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+}
+
+model Batch {
+  id        String      @id @default(uuid())
+  name      String
+  courseId  String
+  course    Course      @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  days      String      // e.g. "Mon, Wed, Fri"
+  startTime String      // e.g. "17:00"
+  endTime   String      // e.g. "18:00"
+  capacity  Int
+  status    BatchStatus @default(ACTIVE)
+  students  Student[]
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+}
+
+model Student {
+  id               String           @id @default(uuid())
+  fullName         String
+  phone            String
+  whatsappNumber   String
+  email            String
+  dateOfBirth      DateTime
+  gender           String
+  address          String
+  guardianName     String?
+  guardianPhone    String?
+  emergencyContact String?
+  courseId         String
+  course           Course           @relation(fields: [courseId], references: [id])
+  batchId          String
+  batch            Batch            @relation(fields: [batchId], references: [id])
+  enrollmentDate   DateTime         @default(now())
+  status           StudentStatus    @default(ACTIVE)
+  notes            String?
+  emailRecipients  EmailRecipient[]
+  birthdayLogs     BirthdayEmailLog[]
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+}
+
+model Enquiry {
+  id              String        @id @default(uuid())
+  name            String
+  phone           String
+  email           String
+  age             Int?
+  courseId        String
+  course          Course        @relation(fields: [courseId], references: [id])
+  preferredTiming String?
+  message         String?
+  source          String        @default("WEBSITE")
+  status          EnquiryStatus @default(NEW)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+model Event {
+  id          String      @id @default(uuid())
+  name        String
+  description String
+  date        DateTime
+  startTime   String
+  endTime     String
+  location    String
+  image       String
+  status      EventStatus @default(UPCOMING)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+model EmailCampaign {
+  id              String           @id @default(uuid())
+  subject         String
+  message         String
+  courseId        String
+  course          Course           @relation(fields: [courseId], references: [id])
+  createdBy       String
+  totalRecipients Int
+  sentCount       Int
+  failedCount     Int
+  recipients      EmailRecipient[]
+  createdAt       DateTime         @default(now())
+}
+
+model EmailRecipient {
+  id           String         @id @default(uuid())
+  campaignId   String
+  campaign     EmailCampaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  studentId    String
+  student      Student        @relation(fields: [studentId], references: [id])
+  email        String
+  status       CampaignStatus @default(PENDING)
+  errorMessage String?
+  sentAt       DateTime?
+}
+
+model BirthdayEmailLog {
+  id           String         @id @default(uuid())
+  studentId    String
+  student      Student        @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  birthdayDate String         // Format: YYYY-MM-DD (Asia/Kolkata)
+  email        String
+  status       CampaignStatus @default(PENDING)
+  errorMessage String?
+  sentAt       DateTime?
+  createdAt    DateTime       @default(now())
+
+  @@unique([studentId, birthdayDate])
+}
+
+// ─── Media Gallery ───────────────────────────────────────────────────────────
+
+model GallerySection {
+  id          String         @id @default(uuid())
+  title       String
+  description String?
+  sortOrder   Int            @default(0)
+  isPublished Boolean        @default(true)
+  photos      GalleryPhoto[]
+  videos      GalleryVideo[]
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+}
+
+model GalleryPhoto {
+  id            String          @id @default(uuid())
+  sectionId     String?
+  section       GallerySection? @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  imageUrl      String?
+  imagePath     String?         // Relative path to uploaded file (e.g. "/uploads/gallery/uuid.jpg")
+  mimeType      String
+  fileName      String
+  fileSize      Int
+  caption       String?
+  sortOrder     Int             @default(0)
+  createdAt     DateTime        @default(now())
+  // Back-relations for website content images
+  websiteImage  WebsiteImage?
+  certification Certification?
+}
+
+model GalleryVideo {
+  id         String         @id @default(uuid())
+  sectionId  String
+  section    GallerySection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  youtubeUrl String         // full YouTube watch URL entered by admin
+  youtubeId  String         // extracted video ID for thumbnail / embed
+  title      String?
+  sortOrder  Int            @default(0)
+  createdAt  DateTime       @default(now())
+}
+
+// ─── Website Content Images ───────────────────────────────────────────────────
+
+/// One record per website section image slot.
+/// key examples: "hero", "about-us", "zumba", "course-dance",
+///               "course-zumba", "course-garba", "course-workshops"
+model WebsiteImage {
+  key       String        @id  // identifies the section slot
+  photoId   String?       @unique
+  photo     GalleryPhoto? @relation(fields: [photoId], references: [id], onDelete: SetNull)
+  updatedAt DateTime      @updatedAt
+}
+
+// ─── Certifications ───────────────────────────────────────────────────────────
+
+model Certification {
+  id          String        @id @default(uuid())
+  title       String
+  description String?
+  photoId     String?       @unique
+  photo       GalleryPhoto? @relation(fields: [photoId], references: [id], onDelete: SetNull)
+  sortOrder   Int           @default(0)
+  isPublished Boolean       @default(true)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
